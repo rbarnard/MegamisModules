@@ -1,7 +1,7 @@
 {
   "slug": "ClockSync",
   "name": "ClockSync",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "license": "proprietary",
   "brand": "ClockSync",
   "author": "",
@@ -12,5 +12,16 @@
   "sourceUrl": "",
   "donateUrl": "",
   "changelogUrl": "",
-  "modules": []
+  "modules": [
+    {
+      "slug": "ClockSync",
+      "name": "ClockSync",
+      "description": "Facilitates synchronizing Rack clocks with external devices.",
+      "tags": [
+        "Utility",
+        "Clock modulator",
+        "MIDI"
+      ]
+    }
+  ]
 }

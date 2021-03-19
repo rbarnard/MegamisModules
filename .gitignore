@@ -5,4 +5,6 @@
 /plugin.dll
 .DS_Store
 
+cmake-build*
 TODO.md
+.idea/

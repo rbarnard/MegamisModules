@@ -30,6 +30,7 @@ struct ClockSync : Module {
 
     // TODO: Make configurable -- context menu?
     const unsigned short NUM_PPQN = 24;
+    const float OUTPUT_PULSE_DURATION = 5e-3f;
 
     dsp::SchmittTrigger mainClockTrigger, extClockTrigger;
     unsigned long sampleIndex = 0;
@@ -82,6 +83,7 @@ struct ClockSync : Module {
     struct OutputClock {
         dsp::PulseGenerator pulseGenerator;
 
+        bool active = false;
         int pulsesPerQN = 0;
         int pulsesThisNote = 0;
         float curNoteTime = 0.0f;
@@ -99,15 +101,22 @@ struct ClockSync : Module {
       config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
       configParam(RUNTOGGLE_PARAM, 0.f, 1.f, 0.f, "");
       configParam(SYNCTOGGLE_PARAM, 0.f, 1.f, 0.f, "");
-      configParam(THRESHKNOB_PARAM, 0.f, 1.f, 0.f, "");
+      configParam(THRESHKNOB_PARAM, 1.0e-4f, 0.5f, 2.0e-4f, "");
 
       // TODO: Make configurable
       outputClock.pulsesPerQN = NUM_PPQN;
+
+      // Make sure the sample rate gets set at least once
+      setSampleRate();
     }
 
     void onSampleRateChange() override {
       Module::onSampleRateChange();
 
+      setSampleRate();
+    }
+
+    void setSampleRate() {
       mainClock.currentSampleRate = APP->engine->getSampleRate();
       externalClock.currentSampleRate = APP->engine->getSampleRate();
 
@@ -141,6 +150,11 @@ struct ClockSync : Module {
       if (updateClockTiming(&mainClockTrigger, &inputs[MAINCLKIN_INPUT], &mainClock)) {
         outputClock.timePerPulse = mainClock.timePerPeriod / (float) NUM_PPQN;
 
+        // We don't want to start sending output clock pulses until we've gotten timing from
+        // the main clock; setting outputClock.active here signals that we're ready to send
+        // those pulses.
+        outputClock.active = true;
+
         DEBUG(
             "Got Clock Trigger: sppqn=%f / %f / %f / %f",
             mainClock.timePerPeriod, outputClock.timePerPulse,
@@ -162,16 +176,24 @@ struct ClockSync : Module {
 
         if (!currentlySynchronized && synchronize) {
           if (offset > mainClock.halfPeriod) {
-            outputClock.curNoteTime -= mainClock.timePerPeriod + (mainClock.timePerPeriod - offset);
-          } else {
+            // We're early: delay the next clock pulse by (period - offset)
             outputClock.curNoteTime -= delay;
+          } else {
+            // We're late: speed up the clock so that we finish a complete cycle just in time for the
+            // next main clock beat. Once that beat arrives, the external clock period will be readjusted
+            // to match the main clock.
+            outputClock.timePerPulse = delay / (float) (NUM_PPQN);
           }
         }
 
-        DEBUG("Got ext trigger:  sppqn=%f / %f / %f; err=%f, thresh=%f, off=%f, dly=%f, currentlySynchronized=%d",
-              externalClock.timePerPeriod,
-              externalClock.beatsPerSecond, externalClock.beatsPerMinute,
-              error, thresh, offset, delay, currentlySynchronized
+        DEBUG(
+            "Got ext trigger:  sppqn=%f / %f / %f; err=%f, thresh=%f, off=%f, dly=%f, cNT=%f, tPP=%f, remPulses=%d, tSLP=%f, currentlySynchronized=%d",
+            externalClock.timePerPeriod,
+            externalClock.beatsPerSecond, externalClock.beatsPerMinute,
+            error, thresh, offset, delay,
+            outputClock.curNoteTime, outputClock.timePerPulse,
+            (NUM_PPQN - outputClock.pulsesThisNote),
+            currentlySynchronized
         );
 
         if (!currentlySynchronized) {
@@ -183,42 +205,31 @@ struct ClockSync : Module {
         }
       }
 
-      if (processOutputClock(&outputClock, args.sampleTime) && running) {
+      if (running && processOutputClock(&outputClock, args.sampleTime)) {
         // TODO: extract constant; is there a VCV constant for the correct value for max V?
         outputs[EXTCLKOUT_OUTPUT].value = 10;
       } else {
         outputs[EXTCLKOUT_OUTPUT].value = 0;
       }
 
-//      if (updateClockTiming(&extClockTrigger, &inputs[EXTCLKIN_INPUT], &externalClock)) {
-//        DEBUG("Got Ext Trigger: %f", externalClock.timePerPeriod);
-//      }
-
-//      if (clockTrigger.process(math::rescale(inputs[MAINCLKIN_INPUT].getVoltage(), 0.1f, 2.f, 0.f, 1.f))) {
-//        mainClockPeriod = curSampleTime - lastClockSample;
-//        samplesPerQuarterNote = mainClockPeriod * args.sampleRate;
-//        outputSamplesPQN = ceil(samplesPerQuarterNote / NUM_PPQN);
-//
-//        DEBUG("Got Clock Trigger: sppqn=%f / %f", samplesPerQuarterNote, outputSamplesPQN);
-//
-//        lastClockSample = curSampleTime;
-//      }
-
-
       lights[RUNNING_LIGHT].value = running;
       lights[SYNCTOGGLE_LIGHT].value = synchronize;
     }
 
-    static bool processOutputClock(OutputClock *outputClock, float dT) {
+    bool processOutputClock(OutputClock *outputClock, float dT) const {
+      if (!outputClock->active) {
+        return false;
+      }
+
       outputClock->curNoteTime += dT;
 
       if (outputClock->curNoteTime >= outputClock->timePerPulse) {
-        outputClock->pulseGenerator.trigger(1e-3f);
+        outputClock->pulseGenerator.trigger(OUTPUT_PULSE_DURATION);
         outputClock->curNoteTime -= outputClock->timePerPulse;
         outputClock->pulsesThisNote++;
 
         if (outputClock->pulsesThisNote % outputClock->pulsesPerQN == 0) {
-          DEBUG("Completed output quarter note (cNT=%f)", outputClock->curNoteTime);
+          DEBUG("Completed output quarter note (cNT=%f, tPP=%f)", outputClock->curNoteTime, outputClock->timePerPulse);
           outputClock->pulsesThisNote = 0;
         }
       }

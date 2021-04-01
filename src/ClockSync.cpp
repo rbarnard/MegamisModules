@@ -228,9 +228,17 @@ struct ClockSync : Module {
         outputClock->curNoteTime -= outputClock->timePerPulse;
         outputClock->pulsesThisNote++;
 
+        // The external sequencer and ClockSync may not be aligned on *which* pulse is actually the final
+        // pulse of a quarter note, but we still want to keep track of when we've completed a quarter note's
+        // worth of pulses in order to reset floating point timers.
         if (outputClock->pulsesThisNote % outputClock->pulsesPerQN == 0) {
           DEBUG("Completed output quarter note (cNT=%f, tPP=%f)", outputClock->curNoteTime, outputClock->timePerPulse);
           outputClock->pulsesThisNote = 0;
+
+          // Reset the current note time--otherwise we'll get accumulating floating point error; this may
+          // result in a consistent offset below the threshold, but it shouldn't get *worse* over time,
+          // at least to the extent that other timing factors remain the same.
+          outputClock->curNoteTime = 0.0f;
         }
       }
 

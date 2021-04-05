@@ -39,12 +39,8 @@ struct ClockSync : Module {
     dsp::SchmittTrigger mainClockTrigger, extClockTrigger;
     unsigned long sampleIndex = 0;
     float curSampleTime = 0.0f;
-    bool running = false;
-    bool synchronize = false;
     bool currentlySynchronized = false;
 
-    dsp::BooleanTrigger runTrigger;
-    dsp::BooleanTrigger syncTrigger;
 
     // Using args.sampleTime accumulates fp error, so we use
     // the number of samples and the sample rate to calculate
@@ -94,11 +90,54 @@ struct ClockSync : Module {
         float timePerPulse = 0.0f;
     };
 
+    // Represents state that can be toggled by either a button or external CV (e.g. run, sync)
+    struct CVButtonToggle {
+        dsp::BooleanTrigger trigger;
+
+        Param *button;
+        Input *cv;
+        bool state;
+
+        CVButtonToggle(Param *button, Input *cv, bool initialState) {
+          this->button = button;
+          this->cv = cv;
+          this->state = initialState;
+        }
+
+        // Processes the button and CV inputs and toggles the state if necessary. Returns
+        // true if there was a change and false otherwise. Check the value of the state field
+        // to get the most recent state.
+        bool process() {
+          // Check the CV input first if it's connected
+          if (cv->isConnected()) {
+            // TODO: Extract constant for the threshold -- is there a VCV standard I should follow?
+            bool shouldBeEnabled = cv->getVoltage() > 1.0f;
+            if (shouldBeEnabled != state) {
+              state = shouldBeEnabled;
+              return true;
+            }
+          } else {
+            // The CV input isn't connected, so use the button instead
+            if (trigger.process(button->getValue() > 0.0f)) {
+              state = !state;
+              return true;
+            }
+          }
+
+          return false;
+        }
+    };
+
     ClockTiming mainClock;
     ClockTiming externalClock;
     OutputClock outputClock;
 
     InternalClock internalClock;
+
+    // TODO: Dynamic initialization seems uncommon--is this a poor practice for VCV plugins?
+    std::unique_ptr<CVButtonToggle> runToggle;
+    std::unique_ptr<CVButtonToggle> syncToggle;
+
 
     ClockSync() {
       // TODO: Add labels and set ranges/defaults
@@ -109,6 +148,11 @@ struct ClockSync : Module {
 
       // TODO: Make configurable
       outputClock.pulsesPerQN = NUM_PPQN;
+
+      // Initialize the run and sync toggles (using reset since we can't initialize until after the params and
+      // inputs have been created, which means we can't use member initialization).
+      runToggle.reset(new CVButtonToggle(&params[RUNTOGGLE_PARAM], &inputs[RUNCV_INPUT], false));
+      syncToggle.reset(new CVButtonToggle(&params[SYNCTOGGLE_PARAM], &inputs[SYNCCV_INPUT], false));
     }
 
     void onAdd() override {
@@ -141,13 +185,8 @@ struct ClockSync : Module {
     //       NB: Error accumulation with doubles rather than floats is significantly less (but not zero)...
     void process(const ProcessArgs &args) override {
       // TODO: Review voltage standards doc; not sure >0 is proper here
-      if (runTrigger.process(params[RUNTOGGLE_PARAM].getValue() > 0.0f)) {
-        running = !running;
-      }
-
-      if (syncTrigger.process(params[SYNCTOGGLE_PARAM].getValue() > 0.0f)) {
-        synchronize = !synchronize;
-      }
+      runToggle->process();
+      syncToggle->process();
 
       curSampleTime += args.sampleTime;
       sampleIndex++;
@@ -183,7 +222,7 @@ struct ClockSync : Module {
         float error = (mainClock.halfPeriod - abs(offset - mainClock.halfPeriod)) / mainClock.halfPeriod;
         currentlySynchronized = error <= thresh;
 
-        if (!currentlySynchronized && synchronize) {
+        if (!currentlySynchronized && syncToggle->state) {
           if (offset > mainClock.halfPeriod) {
             // We're early: delay the next clock pulse by (period - offset)
             outputClock.curNoteTime -= delay;
@@ -216,15 +255,15 @@ struct ClockSync : Module {
         }
       }
 
-      if (running && processOutputClock(&outputClock, args.sampleTime)) {
+      if (runToggle->state && processOutputClock(&outputClock, args.sampleTime)) {
         // TODO: extract constant; is there a VCV constant for the correct value for max V?
         outputs[EXTCLKOUT_OUTPUT].value = 10;
       } else {
         outputs[EXTCLKOUT_OUTPUT].value = 0;
       }
 
-      lights[RUNNING_LIGHT].value = running;
-      lights[SYNCTOGGLE_LIGHT].value = synchronize;
+      lights[RUNNING_LIGHT].value = runToggle->state;
+      lights[SYNCTOGGLE_LIGHT].value = syncToggle->state;
     }
 
     bool processOutputClock(OutputClock *outputClock, float dT) const {
@@ -285,8 +324,8 @@ struct ClockSync : Module {
       json_t *rootJ = json_object();
 
       // Running & sync states
-      json_object_set_new(rootJ, PERSIST_KEY_RUNNING, json_integer((int) this->running));
-      json_object_set_new(rootJ, PERSIST_KEY_SYNC, json_integer((int) this->synchronize));
+      json_object_set_new(rootJ, PERSIST_KEY_RUNNING, json_integer((int) this->runToggle->state));
+      json_object_set_new(rootJ, PERSIST_KEY_SYNC, json_integer((int) this->syncToggle->state));
 
       return rootJ;
     }
@@ -297,11 +336,11 @@ struct ClockSync : Module {
       json_t *syncJ = json_object_get(rootJ, PERSIST_KEY_SYNC);
 
       if (runningJ) {
-        this->running = json_integer_value(runningJ);
+        this->runToggle->state = json_integer_value(runningJ);
       }
 
       if (syncJ) {
-        this->synchronize = json_integer_value(syncJ);
+        this->syncToggle->state = json_integer_value(syncJ);
       }
     }
 };

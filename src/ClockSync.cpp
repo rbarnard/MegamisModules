@@ -155,6 +155,7 @@ struct ClockSync : Module {
         // those pulses.
         outputClock.active = true;
 
+#ifdef CLOCKSYNC_DEBUG
         DEBUG(
             "Got Clock Trigger: sppqn=%f / %f / %f / %f",
             mainClock.timePerPeriod, outputClock.timePerPulse,
@@ -165,6 +166,7 @@ struct ClockSync : Module {
             "Int Clock: Samples=%d, Est Time=%f, Cum Time=%f",
             internalClock.numSamples, internalClock.estimatedTime, internalClock.currentTime
         );
+#endif
       }
 
       if (updateClockTiming(&extClockTrigger, &inputs[EXTCLKIN_INPUT], &externalClock)) {
@@ -186,6 +188,7 @@ struct ClockSync : Module {
           }
         }
 
+#ifdef CLOCKSYNC_DEBUG
         DEBUG(
             "Got ext trigger:  sppqn=%f / %f / %f; err=%f, thresh=%f, off=%f, dly=%f, cNT=%f, tPP=%f, remPulses=%d, tSLP=%f, currentlySynchronized=%d",
             externalClock.timePerPeriod,
@@ -195,6 +198,7 @@ struct ClockSync : Module {
             (NUM_PPQN - outputClock.pulsesThisNote),
             currentlySynchronized
         );
+#endif
 
         if (!currentlySynchronized) {
           lights[SYNCLED_LIGHT + 0].setBrightness(0);
@@ -232,7 +236,9 @@ struct ClockSync : Module {
         // pulse of a quarter note, but we still want to keep track of when we've completed a quarter note's
         // worth of pulses in order to reset floating point timers.
         if (outputClock->pulsesThisNote % outputClock->pulsesPerQN == 0) {
+#ifdef CLOCKSYNC_DEBUG
           DEBUG("Completed output quarter note (cNT=%f, tPP=%f)", outputClock->curNoteTime, outputClock->timePerPulse);
+#endif
           outputClock->pulsesThisNote = 0;
 
           // Reset the current note time--otherwise we'll get accumulating floating point error; this may

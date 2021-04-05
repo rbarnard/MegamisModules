@@ -1,6 +1,10 @@
 #include "plugin.hpp"
 
 
+static const char *const PERSIST_KEY_RUNNING = "running";
+
+static const char *const PERSIST_KEY_SYNC = "synchronize";
+
 // TODO: Is there a documented, requested code style for VCV modules?
 struct ClockSync : Module {
     enum ParamIds {
@@ -272,6 +276,30 @@ struct ClockSync : Module {
       }
 
       return false;
+    }
+
+    json_t *dataToJson() override {
+      json_t *rootJ = json_object();
+
+      // Running & sync states
+      json_object_set_new(rootJ, PERSIST_KEY_RUNNING, json_integer((int) this->running));
+      json_object_set_new(rootJ, PERSIST_KEY_SYNC, json_integer((int) this->synchronize));
+
+      return rootJ;
+    }
+
+    void dataFromJson(json_t *rootJ) override {
+      // Running & sync states
+      json_t *runningJ = json_object_get(rootJ, PERSIST_KEY_RUNNING);
+      json_t *syncJ = json_object_get(rootJ, PERSIST_KEY_SYNC);
+
+      if (runningJ) {
+        this->running = json_integer_value(runningJ);
+      }
+
+      if (syncJ) {
+        this->synchronize = json_integer_value(syncJ);
+      }
     }
 };
 

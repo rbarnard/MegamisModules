@@ -109,8 +109,11 @@ struct ClockSync : Module {
 
       // TODO: Make configurable
       outputClock.pulsesPerQN = NUM_PPQN;
+    }
 
-      // Make sure the sample rate gets set at least once
+    void onAdd() override {
+      Module::onAdd();
+
       setSampleRate();
     }
 

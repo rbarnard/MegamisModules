@@ -117,6 +117,7 @@ struct ClockSync : Module {
               return true;
             }
           } else {
+            // TODO: Review voltage standards doc; not sure >0 is proper here
             // The CV input isn't connected, so use the button instead
             if (trigger.process(button->getValue() > 0.0f)) {
               state = !state;
@@ -184,7 +185,6 @@ struct ClockSync : Module {
     //       level without breaking the macro sync wrt non-quarter note external gates
     //       NB: Error accumulation with doubles rather than floats is significantly less (but not zero)...
     void process(const ProcessArgs &args) override {
-      // TODO: Review voltage standards doc; not sure >0 is proper here
       runToggle->process();
       syncToggle->process();
 

@@ -10,6 +10,10 @@ static const char *const PERSIST_KEY_SYNC = "synchronize";
 // above the value set on the knob.
 static const float THRESHOLD_CV_SCALING_FACTOR = 0.1f;
 
+// Scales the amount of synchronization error so that 0V corresponds to perfect sync and 10V corresponds
+// to 180° out of phase.
+static const float SYNC_QUALITY_CV_SCALING_FACTOR = 10.0f;
+
 // TODO: Is there a documented, requested code style for VCV modules?
 struct ClockSync : Module {
     enum ParamIds {
@@ -272,6 +276,12 @@ struct ClockSync : Module {
         } else {
           lights[SYNCLED_LIGHT + 0].setBrightness(1);
           lights[SYNCLED_LIGHT + 1].setBrightness(0);
+        }
+
+        // Don't set the sync CV output if we don't yet have a valid output clock. Usually only happens when
+        // first created, before we've gotten a couple of clock pulses.
+        if (outputClock.active) {
+          outputs[SYNCOUT_OUTPUT].setVoltage(error * SYNC_QUALITY_CV_SCALING_FACTOR);
         }
       }
 

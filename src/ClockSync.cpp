@@ -28,6 +28,7 @@ struct ClockSync : Module {
     };
     enum OutputIds {
         EXTCLKOUT_OUTPUT,
+        SYNCOUT_OUTPUT,
         NUM_OUTPUTS
     };
     enum LightIds {
@@ -382,19 +383,20 @@ struct ClockSyncWidget : ModuleWidget {
       addParam(createParamCentered<LEDButton>(mm2px(Vec(29.527, 40.452)), module, ClockSync::SYNCTOGGLE_PARAM));
       addChild(createLightCentered<LEDBezelLight<GreenLight>>(mm2px(Vec(29.527, 40.452)), module,
                                                               ClockSync::SYNCTOGGLE_LIGHT));
-
-      addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(18.454, 59.349)), module, ClockSync::THRESHKNOB_PARAM));
+      addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(18.454, 54.587)), module, ClockSync::THRESHKNOB_PARAM));
 
       addInput(createInputCentered<PJ301MPort>(mm2px(Vec(11.663, 22.883)), module, ClockSync::RUNCV_INPUT));
       addInput(createInputCentered<PJ301MPort>(mm2px(Vec(11.515, 40.304)), module, ClockSync::SYNCCV_INPUT));
-      addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.791, 59.497)), module, ClockSync::THRESHCV_INPUT));
+      addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.791, 54.734)), module, ClockSync::THRESHCV_INPUT));
       addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.63, 96.526)), module, ClockSync::MAINCLKIN_INPUT));
       addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.777, 115.571)), module, ClockSync::EXTCLKIN_INPUT));
 
+      addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(38.623, 76.074)), module, ClockSync::SYNCOUT_OUTPUT));
       addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(38.828, 114.981)), module, ClockSync::EXTCLKOUT_OUTPUT));
 
       addChild(
-          createLightCentered<MediumLight<GreenRedLight>>(mm2px(Vec(24.36, 76.77)), module, ClockSync::SYNCLED_LIGHT));
+          createLightCentered<MediumLight<GreenRedLight>>(mm2px(Vec(18.012, 75.951)), module,
+                                                          ClockSync::SYNCLED_LIGHT));
     }
 };
 

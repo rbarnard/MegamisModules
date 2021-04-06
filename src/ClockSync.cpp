@@ -198,8 +198,11 @@ struct ClockSync : Module {
 
         // We don't want to start sending output clock pulses until we've gotten timing from
         // the main clock; setting outputClock.active here signals that we're ready to send
-        // those pulses.
-        outputClock.active = true;
+        // those pulses. Also ensure that the time per pulse is at least as big as the pulse
+        // period--the output gate would never be off otherwise.
+        if (outputClock.timePerPulse > OUTPUT_PULSE_DURATION) {
+          outputClock.active = true;
+        }
 
 #ifdef CLOCKSYNC_DEBUG
         DEBUG(

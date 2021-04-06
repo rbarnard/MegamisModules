@@ -5,6 +5,11 @@ static const char *const PERSIST_KEY_RUNNING = "running";
 
 static const char *const PERSIST_KEY_SYNC = "synchronize";
 
+// The amount to scale voltages supplied to the threshold CV input by. Typical application is
+// a bipolar control voltage [-5, 5]V, allowing the final threshold value to be 0.5 below or
+// above the value set on the knob.
+static const float THRESHOLD_CV_SCALING_FACTOR = 0.1f;
+
 // TODO: Is there a documented, requested code style for VCV modules?
 struct ClockSync : Module {
     enum ParamIds {
@@ -181,6 +186,17 @@ struct ClockSync : Module {
       clock->estimatedTime = (float) clock->numSamples / args.sampleRate;
     }
 
+    // Returns the value of the threshold knob. If the threshold CV input is connected, the supplied voltage
+    // is multiplied by the scaling factor and added to the threshold value.
+    float getThresholdValue() {
+      float baseThresholdValue = params[THRESHKNOB_PARAM].getValue();
+      if (inputs[THRESHCV_INPUT].isConnected()) {
+        baseThresholdValue += inputs[THRESHCV_INPUT].getVoltage() * THRESHOLD_CV_SCALING_FACTOR;
+      }
+
+      return baseThresholdValue;
+    }
+
     // TODO: With sync off, error accumulates; figure out a way to keep in sync on a micro
     //       level without breaking the macro sync wrt non-quarter note external gates
     //       NB: Error accumulation with doubles rather than floats is significantly less (but not zero)...
@@ -221,7 +237,7 @@ struct ClockSync : Module {
       if (updateClockTiming(&extClockTrigger, &inputs[EXTCLKIN_INPUT], &externalClock)) {
         float offset = mainClock.periodTimer.getElapsed(args.sampleRate);
         float delay = mainClock.timePerPeriod - offset;
-        float thresh = params[THRESHKNOB_PARAM].getValue();
+        float thresh = getThresholdValue();
         float error = (mainClock.halfPeriod - abs(offset - mainClock.halfPeriod)) / mainClock.halfPeriod;
         currentlySynchronized = error <= thresh;
 

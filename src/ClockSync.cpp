@@ -271,7 +271,7 @@ struct ClockSync : Module {
 #endif
 
         if (!currentlySynchronized) {
-          lights[SYNCLED_LIGHT + 0].setBrightness(0);
+          lights[SYNCLED_LIGHT + 0].setBrightness(1 - error);
           lights[SYNCLED_LIGHT + 1].setBrightness(error);
         } else {
           lights[SYNCLED_LIGHT + 0].setBrightness(1);

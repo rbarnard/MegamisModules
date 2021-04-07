@@ -243,7 +243,7 @@ struct ClockSync : Module {
         float offset = mainClock.periodTimer.getElapsed(args.sampleRate);
         float delay = mainClock.timePerPeriod - offset;
         float thresh = getThresholdValue();
-        float error = (mainClock.halfPeriod - abs(offset - mainClock.halfPeriod)) / mainClock.halfPeriod;
+        float error = abs(mainClock.halfPeriod - abs(offset - mainClock.halfPeriod)) / mainClock.halfPeriod;
         currentlySynchronized = error <= thresh;
 
         if (!currentlySynchronized && syncToggle->state) {
@@ -281,7 +281,8 @@ struct ClockSync : Module {
         // Don't set the sync CV output if we don't yet have a valid output clock. Usually only happens when
         // first created, before we've gotten a couple of clock pulses.
         if (outputClock.active) {
-          outputs[SYNCOUT_OUTPUT].setVoltage(error * SYNC_QUALITY_CV_SCALING_FACTOR);
+          outputs[SYNCOUT_OUTPUT].setVoltage(
+              clamp(error * SYNC_QUALITY_CV_SCALING_FACTOR, 0.0f, 10.0f));
         }
       }
 

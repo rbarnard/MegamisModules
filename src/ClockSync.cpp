@@ -5,6 +5,8 @@ static const char *const PERSIST_KEY_RUNNING = "running";
 
 static const char *const PERSIST_KEY_SYNC = "synchronize";
 
+static const char *const PERSIST_KEY_SYNCOUT_ALWAYS = "syncout_always";
+
 // The amount to scale voltages supplied to the threshold CV input by. Typical application is
 // a bipolar control voltage [-5, 5]V, allowing the final threshold value to be 0.5 below or
 // above the value set on the knob.
@@ -20,6 +22,7 @@ struct ClockSync : Module {
         RUNTOGGLE_PARAM,
         SYNCTOGGLE_PARAM,
         THRESHKNOB_PARAM,
+        SYNCOUT_ALWAYS_ENABLED_PARAM,
         NUM_PARAMS
     };
     enum InputIds {
@@ -175,6 +178,7 @@ struct ClockSync : Module {
       configParam(RUNTOGGLE_PARAM, 0.f, 1.f, 0.f, "");
       configParam(SYNCTOGGLE_PARAM, 0.f, 1.f, 0.f, "");
       configParam(THRESHKNOB_PARAM, 1.0e-4f, 0.5f, 2.0e-4f, "");
+      configParam(SYNCOUT_ALWAYS_ENABLED_PARAM, 0.0f, 1.0f, 1.0f, "Always Set Sync Out");
 
       // TODO: Make configurable
       outputClock.pulsesPerQN = NUM_PPQN;
@@ -303,9 +307,11 @@ struct ClockSync : Module {
 
         // Don't set the sync CV output if we don't yet have a valid output clock. Usually only happens when
         // first created, before we've gotten a couple of clock pulses.
-        if (outputClock.active) {
+        if (shouldSyncOutBeSet()) {
           outputs[SYNCOUT_OUTPUT].setVoltage(
               clamp(error * SYNC_QUALITY_CV_SCALING_FACTOR, 0.0f, 10.0f));
+        } else {
+          outputs[SYNCOUT_OUTPUT].setVoltage(0.0f);
         }
       }
 
@@ -315,6 +321,25 @@ struct ClockSync : Module {
       } else {
         outputs[EXTCLKOUT_OUTPUT].value = 0;
       }
+    }
+
+    // Determines if the synchronization status output should be set. If the output clock isn't active, no.
+    // Otherwise, check whether synchronization is turned on and whether the syncout mode is set to be disabled
+    // when sync is off.
+    bool shouldSyncOutBeSet() {
+      if (!outputClock.active) {
+        return false;
+      }
+
+      // 0 means that sync out should be linked to sync state; 1 means that sync out should always be active.
+      // If always active, we don't care about the sync toggle, so go ahead and return true, that we should set
+      // the sync output
+      if (params[SYNCOUT_ALWAYS_ENABLED_PARAM].getValue() > 0.0f) {
+        return true;
+      }
+
+      // If we're here, we only set the sync output if the sync toggle is enabled.
+      return syncToggle->active;
     }
 
     bool processOutputClock(OutputClock *outputClock, float dT) const {
@@ -377,6 +402,8 @@ struct ClockSync : Module {
       // Running & sync states
       json_object_set_new(rootJ, PERSIST_KEY_RUNNING, json_integer((int) this->runToggle->buttonState));
       json_object_set_new(rootJ, PERSIST_KEY_SYNC, json_integer((int) this->syncToggle->buttonState));
+      json_object_set_new(rootJ, PERSIST_KEY_SYNCOUT_ALWAYS,
+                          json_integer((int) params[SYNCOUT_ALWAYS_ENABLED_PARAM].getValue()));
 
       return rootJ;
     }
@@ -385,6 +412,7 @@ struct ClockSync : Module {
       // Running & sync states
       json_t *runningJ = json_object_get(rootJ, PERSIST_KEY_RUNNING);
       json_t *syncJ = json_object_get(rootJ, PERSIST_KEY_SYNC);
+      json_t *syncOutAlwaysJ = json_object_get(rootJ, PERSIST_KEY_SYNCOUT_ALWAYS);
 
       if (runningJ) {
         this->runToggle->buttonState = json_integer_value(runningJ);
@@ -392,6 +420,10 @@ struct ClockSync : Module {
 
       if (syncJ) {
         this->syncToggle->buttonState = json_integer_value(syncJ);
+      }
+
+      if (syncOutAlwaysJ) {
+        params[SYNCOUT_ALWAYS_ENABLED_PARAM].setValue(json_integer_value(syncOutAlwaysJ));
       }
     }
 };
@@ -432,8 +464,10 @@ struct ClockSyncWidget : ModuleWidget {
       addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(38.828, 114.981)), module, ClockSync::EXTCLKOUT_OUTPUT));
 
       addChild(
-          createLightCentered<MediumLight<GreenRedLight>>(mm2px(Vec(18.012, 75.951)), module,
+          createLightCentered<MediumLight<GreenRedLight>>(mm2px(Vec(15, 75.951)), module,
                                                           ClockSync::SYNCLED_LIGHT));
+
+      addChild(createParam<CKSS>(mm2px(Vec(21, 69)), module, ClockSync::SYNCOUT_ALWAYS_ENABLED_PARAM));
     }
 };
 

@@ -37,8 +37,10 @@ struct ClockSync : Module {
     };
     enum LightIds {
         ENUMS(SYNCLED_LIGHT, 2), // Need two for green+red
-        RUNNING_LIGHT,
-        SYNCTOGGLE_LIGHT,
+        RUN_TOGGLE_BUTTON_LIGHT,
+        SYNC_TOGGLE_BUTTON_LIGHT,
+        RUN_STATUS_LIGHT,
+        SYNC_STATUS_LIGHT,
         NUM_LIGHTS
     };
 
@@ -100,42 +102,59 @@ struct ClockSync : Module {
         float timePerPulse = 0.0f;
     };
 
-    // Represents state that can be toggled by either a button or external CV (e.g. run, sync)
+    // Represents active that can be toggled by either a button or external CV (e.g. run, sync)
     struct CVButtonToggle {
         dsp::BooleanTrigger trigger;
 
         Param *button;
         Input *cv;
-        bool state;
+        Light *buttonLED;
+        Light *statusLED;
 
-        CVButtonToggle(Param *button, Input *cv, bool initialState) {
+        bool buttonState;
+        bool active;
+
+        CVButtonToggle(Param *button, Input *cv, Light *buttonIndicator, Light *status, bool initialState) {
           this->button = button;
           this->cv = cv;
-          this->state = initialState;
+          this->buttonLED = buttonIndicator;
+          this->statusLED = status;
+          this->active = initialState;
+          this->buttonState = initialState;
         }
 
-        // Processes the button and CV inputs and toggles the state if necessary. Returns
-        // true if there was a change and false otherwise. Check the value of the state field
-        // to get the most recent state.
-        bool process() {
-          // Check the CV input first if it's connected
+        // Processes the button and CV inputs and toggles the active if necessary. Returns
+        // true if there was a change and false otherwise. Check the value of the active field
+        // to get the most recent active.
+        void process() {
+          // The toggles with a CV input are ANDed together; the active is only on if both the CV input
+          // is high and the button is toggled to on.
+
+          bool cvState = getCVState();
+          processButton();
+
+          active = cvState && buttonState;
+
+          buttonLED->value = buttonState;
+          statusLED->value = active;
+        }
+
+        bool getCVState() const {
+          // If the CV input isn't connected, just treat the CV active as true so that the AND logic doesn't
+          // have to otherwise change.
           if (cv->isConnected()) {
             // TODO: Extract constant for the threshold -- is there a VCV standard I should follow?
-            bool shouldBeEnabled = cv->getVoltage() > 1.0f;
-            if (shouldBeEnabled != state) {
-              state = shouldBeEnabled;
-              return true;
-            }
+            return cv->getVoltage() > 1.0f;
           } else {
-            // TODO: Review voltage standards doc; not sure >0 is proper here
-            // The CV input isn't connected, so use the button instead
-            if (trigger.process(button->getValue() > 0.0f)) {
-              state = !state;
-              return true;
-            }
+            return true;
           }
+        }
 
-          return false;
+        void processButton() {
+          // TODO: Review voltage standards doc; not sure >0 is proper here
+          if (trigger.process(button->getValue() > 0.0f)) {
+            buttonState = !buttonState;
+          }
         }
     };
 
@@ -162,8 +181,12 @@ struct ClockSync : Module {
 
       // Initialize the run and sync toggles (using reset since we can't initialize until after the params and
       // inputs have been created, which means we can't use member initialization).
-      runToggle.reset(new CVButtonToggle(&params[RUNTOGGLE_PARAM], &inputs[RUNCV_INPUT], false));
-      syncToggle.reset(new CVButtonToggle(&params[SYNCTOGGLE_PARAM], &inputs[SYNCCV_INPUT], false));
+      runToggle.reset(new CVButtonToggle(
+          &params[RUNTOGGLE_PARAM], &inputs[RUNCV_INPUT],
+          &lights[RUN_TOGGLE_BUTTON_LIGHT], &lights[RUN_STATUS_LIGHT], false));
+      syncToggle.reset(new CVButtonToggle(
+          &params[SYNCTOGGLE_PARAM], &inputs[SYNCCV_INPUT],
+          &lights[SYNC_TOGGLE_BUTTON_LIGHT], &lights[SYNC_STATUS_LIGHT], false));
     }
 
     void onAdd() override {
@@ -246,7 +269,7 @@ struct ClockSync : Module {
         float error = abs(mainClock.halfPeriod - abs(offset - mainClock.halfPeriod)) / mainClock.halfPeriod;
         currentlySynchronized = error <= thresh;
 
-        if (!currentlySynchronized && syncToggle->state) {
+        if (!currentlySynchronized && syncToggle->active) {
           if (offset > mainClock.halfPeriod) {
             // We're early: delay the next clock pulse by (period - offset)
             outputClock.curNoteTime -= delay;
@@ -286,15 +309,12 @@ struct ClockSync : Module {
         }
       }
 
-      if (runToggle->state && processOutputClock(&outputClock, args.sampleTime)) {
+      if (runToggle->active && processOutputClock(&outputClock, args.sampleTime)) {
         // TODO: extract constant; is there a VCV constant for the correct value for max V?
         outputs[EXTCLKOUT_OUTPUT].value = 10;
       } else {
         outputs[EXTCLKOUT_OUTPUT].value = 0;
       }
-
-      lights[RUNNING_LIGHT].value = runToggle->state;
-      lights[SYNCTOGGLE_LIGHT].value = syncToggle->state;
     }
 
     bool processOutputClock(OutputClock *outputClock, float dT) const {
@@ -355,8 +375,8 @@ struct ClockSync : Module {
       json_t *rootJ = json_object();
 
       // Running & sync states
-      json_object_set_new(rootJ, PERSIST_KEY_RUNNING, json_integer((int) this->runToggle->state));
-      json_object_set_new(rootJ, PERSIST_KEY_SYNC, json_integer((int) this->syncToggle->state));
+      json_object_set_new(rootJ, PERSIST_KEY_RUNNING, json_integer((int) this->runToggle->buttonState));
+      json_object_set_new(rootJ, PERSIST_KEY_SYNC, json_integer((int) this->syncToggle->buttonState));
 
       return rootJ;
     }
@@ -367,11 +387,11 @@ struct ClockSync : Module {
       json_t *syncJ = json_object_get(rootJ, PERSIST_KEY_SYNC);
 
       if (runningJ) {
-        this->runToggle->state = json_integer_value(runningJ);
+        this->runToggle->buttonState = json_integer_value(runningJ);
       }
 
       if (syncJ) {
-        this->syncToggle->state = json_integer_value(syncJ);
+        this->syncToggle->buttonState = json_integer_value(syncJ);
       }
     }
 };
@@ -389,11 +409,17 @@ struct ClockSyncWidget : ModuleWidget {
 
       addParam(createParamCentered<LEDButton>(mm2px(Vec(29.97, 23.179)), module, ClockSync::RUNTOGGLE_PARAM));
       addChild(
-          createLightCentered<LEDBezelLight<GreenLight>>(mm2px(Vec(29.97, 23.179)), module, ClockSync::RUNNING_LIGHT));
+          createLightCentered<LEDBezelLight<GreenLight>>(mm2px(Vec(29.97, 23.179)), module,
+                                                         ClockSync::RUN_TOGGLE_BUTTON_LIGHT));
+      addChild(
+          createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(22, 23.179)), module, ClockSync::RUN_STATUS_LIGHT));
 
       addParam(createParamCentered<LEDButton>(mm2px(Vec(29.527, 40.452)), module, ClockSync::SYNCTOGGLE_PARAM));
       addChild(createLightCentered<LEDBezelLight<GreenLight>>(mm2px(Vec(29.527, 40.452)), module,
-                                                              ClockSync::SYNCTOGGLE_LIGHT));
+                                                              ClockSync::SYNC_TOGGLE_BUTTON_LIGHT));
+      addChild(
+          createLightCentered<MediumLight<GreenLight>>(mm2px(Vec(22, 40.452)), module, ClockSync::SYNC_STATUS_LIGHT));
+
       addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(18.454, 54.587)), module, ClockSync::THRESHKNOB_PARAM));
 
       addInput(createInputCentered<PJ301MPort>(mm2px(Vec(11.663, 22.883)), module, ClockSync::RUNCV_INPUT));

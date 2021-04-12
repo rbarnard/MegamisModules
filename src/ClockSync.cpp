@@ -7,6 +7,8 @@ static const char *const PERSIST_KEY_SYNC = "synchronize";
 
 static const char *const PERSIST_KEY_SYNCOUT_ALWAYS = "syncout_always";
 
+static const char *const PERSIST_KEY_PPQN = "ppqn";
+
 // The amount to scale voltages supplied to the threshold CV input by. Typical application is
 // a bipolar control voltage [-5, 5]V, allowing the final threshold value to be 0.5 below or
 // above the value set on the knob.
@@ -48,8 +50,9 @@ struct ClockSync : Module {
     };
 
     // TODO: Make configurable -- context menu?
-    const unsigned short NUM_PPQN = 24;
     const float OUTPUT_PULSE_DURATION = 5e-3f;
+
+    unsigned short num_ppqn = 24;
 
     dsp::SchmittTrigger mainClockTrigger, extClockTrigger;
     unsigned long sampleIndex = 0;
@@ -181,7 +184,7 @@ struct ClockSync : Module {
       configParam(SYNCOUT_ALWAYS_ENABLED_PARAM, 0.0f, 1.0f, 1.0f, "Always Set Sync Out");
 
       // TODO: Make configurable
-      outputClock.pulsesPerQN = NUM_PPQN;
+      outputClock.pulsesPerQN = num_ppqn;
 
       // Initialize the run and sync toggles (using reset since we can't initialize until after the params and
       // inputs have been created, which means we can't use member initialization).
@@ -242,7 +245,7 @@ struct ClockSync : Module {
 
 
       if (updateClockTiming(&mainClockTrigger, &inputs[MAINCLKIN_INPUT], &mainClock)) {
-        outputClock.timePerPulse = mainClock.timePerPeriod / (float) NUM_PPQN;
+        outputClock.timePerPulse = mainClock.timePerPeriod / (float) num_ppqn;
 
         // We don't want to start sending output clock pulses until we've gotten timing from
         // the main clock; setting outputClock.active here signals that we're ready to send
@@ -281,7 +284,7 @@ struct ClockSync : Module {
             // We're late: speed up the clock so that we finish a complete cycle just in time for the
             // next main clock beat. Once that beat arrives, the external clock period will be readjusted
             // to match the main clock.
-            outputClock.timePerPulse = delay / (float) (NUM_PPQN);
+            outputClock.timePerPulse = delay / (float) (num_ppqn);
           }
         }
 
@@ -292,7 +295,7 @@ struct ClockSync : Module {
             externalClock.beatsPerSecond, externalClock.beatsPerMinute,
             error, thresh, offset, delay,
             outputClock.curNoteTime, outputClock.timePerPulse,
-            (NUM_PPQN - outputClock.pulsesThisNote),
+            (num_ppqn - outputClock.pulsesThisNote),
             currentlySynchronized
         );
 #endif
@@ -405,6 +408,10 @@ struct ClockSync : Module {
       json_object_set_new(rootJ, PERSIST_KEY_SYNCOUT_ALWAYS,
                           json_integer((int) params[SYNCOUT_ALWAYS_ENABLED_PARAM].getValue()));
 
+      // Context menu settings
+      json_object_set_new(rootJ, PERSIST_KEY_PPQN, json_integer(this->num_ppqn));
+
+
       return rootJ;
     }
 
@@ -413,6 +420,7 @@ struct ClockSync : Module {
       json_t *runningJ = json_object_get(rootJ, PERSIST_KEY_RUNNING);
       json_t *syncJ = json_object_get(rootJ, PERSIST_KEY_SYNC);
       json_t *syncOutAlwaysJ = json_object_get(rootJ, PERSIST_KEY_SYNCOUT_ALWAYS);
+      json_t *ppqnJ = json_object_get(rootJ, PERSIST_KEY_PPQN);
 
       if (runningJ) {
         this->runToggle->buttonState = json_integer_value(runningJ);
@@ -425,6 +433,48 @@ struct ClockSync : Module {
       if (syncOutAlwaysJ) {
         params[SYNCOUT_ALWAYS_ENABLED_PARAM].setValue(json_integer_value(syncOutAlwaysJ));
       }
+
+      if (ppqnJ) {
+        this->num_ppqn = json_integer_value(ppqnJ);
+      }
+    }
+};
+
+
+struct ClockSyncExtPPQNValueItem : MenuItem {
+    ClockSync *module;
+    int ppqn;
+
+    ClockSyncExtPPQNValueItem(ClockSync *module, int ppqn)
+        : module(module), ppqn(ppqn) {}
+
+    void onAction(const event::Action &e) override {
+      module->num_ppqn = ppqn;
+    }
+};
+
+struct ClockSyncExtPPQNItem : MenuItem {
+    ClockSync *module;
+    const std::list<int> ppqnValues = {
+        1, 4, 6, 12, 24, 48
+    };
+
+    explicit ClockSyncExtPPQNItem(ClockSync *module)
+        : module(module) {}
+
+    Menu *createChildMenu() override {
+      // TODO: Memory management for menu items? Don't see that these ever get deleted.
+      Menu *menu = new Menu();
+
+      for (const auto &value : ppqnValues) {
+        auto *ppqnItem = new ClockSyncExtPPQNValueItem(module, value);
+        ppqnItem->text = std::to_string(value);
+        ppqnItem->rightText = CHECKMARK(module->num_ppqn == value);
+
+        menu->addChild(ppqnItem);
+      }
+
+      return menu;
     }
 };
 
@@ -468,6 +518,19 @@ struct ClockSyncWidget : ModuleWidget {
                                                           ClockSync::SYNCLED_LIGHT));
 
       addChild(createParam<CKSS>(mm2px(Vec(21, 69)), module, ClockSync::SYNCOUT_ALWAYS_ENABLED_PARAM));
+    }
+
+    void appendContextMenu(ui::Menu *menu) override {
+      auto *module = dynamic_cast<ClockSync *>(this->module);
+
+      // Blank entry for spacing
+      menu->addChild(new MenuEntry);
+
+      // External PPQN Setting
+      auto *externalPPQNItem = new ClockSyncExtPPQNItem(module);
+      externalPPQNItem->text = "External Clock PPQN";
+      externalPPQNItem->rightText = RIGHT_ARROW;
+      menu->addChild(externalPPQNItem);
     }
 };
 

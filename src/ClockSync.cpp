@@ -205,8 +205,6 @@ struct ClockSync : Module {
     void setSampleRate() {
       mainClock.currentSampleRate = APP->engine->getSampleRate();
       externalClock.currentSampleRate = APP->engine->getSampleRate();
-
-      DEBUG("Sample Rate Changed");
     }
 
     // Returns the value of the threshold knob. If the threshold CV input is connected, the supplied voltage
@@ -220,9 +218,6 @@ struct ClockSync : Module {
       return baseThresholdValue;
     }
 
-    // TODO: With sync off, error accumulates; figure out a way to keep in sync on a micro
-    //       level without breaking the macro sync wrt non-quarter note external gates
-    //       NB: Error accumulation with doubles rather than floats is significantly less (but not zero)...
     void process(const ProcessArgs &args) override {
       runToggle->process();
       syncToggle->process();
@@ -360,13 +355,11 @@ struct ClockSync : Module {
       timing->periodTimer.tick();
       float voltage = inputPort->getVoltage();
 
-//      if (trigger->process(math::rescale(voltage, 0.1f, 2.f, 0.f, 1.f))) {
       if (trigger->process(voltage)) {
         // TODO: The sample rate can be module-wide
         timing->timePerPeriod = timing->periodTimer.getElapsed(timing->currentSampleRate);
         timing->halfPeriod = timing->timePerPeriod / 2.0f;
 
-//        timing->lastClockSampleTime = internalClock.estimatedTime;
         timing->beatsPerSecond = 1.0f / timing->timePerPeriod;
         timing->beatsPerMinute = timing->beatsPerSecond * 60;
 

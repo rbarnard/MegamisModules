@@ -22,6 +22,9 @@ static const float SYNC_QUALITY_CV_SCALING_FACTOR = 10.0f;
 static const float OUTPUT_PULSE_DURATION = 5e-3f;
 
 
+static const int DEFAULT_PPQN = 24;
+
+
 // TODO: Is there a documented, requested code style for VCV modules?
 struct ClockSync : Module {
     enum ParamIds {
@@ -165,7 +168,7 @@ struct ClockSync : Module {
     std::unique_ptr<CVButtonToggle> runToggle;
     std::unique_ptr<CVButtonToggle> syncToggle;
 
-    unsigned short num_ppqn = 24;
+    unsigned short num_ppqn = DEFAULT_PPQN;
     dsp::SchmittTrigger mainClockTrigger, extClockTrigger;
 
 

@@ -55,9 +55,6 @@ struct ClockSync : Module {
     unsigned short num_ppqn = 24;
 
     dsp::SchmittTrigger mainClockTrigger, extClockTrigger;
-    unsigned long sampleIndex = 0;
-    float curSampleTime = 0.0f;
-    bool currentlySynchronized = false;
 
 
     // Using args.sampleTime accumulates fp error, so we use
@@ -90,12 +87,6 @@ struct ClockSync : Module {
         // TODO: Don't actually need these outside of dev debugging
         float beatsPerSecond = 0.0f, beatsPerMinute = 0.0f;
 
-    };
-
-    struct InternalClock {
-        int numSamples = 0;
-        float currentTime = 0.0f;
-        float estimatedTime = 0.0f;
     };
 
     struct OutputClock {
@@ -168,8 +159,6 @@ struct ClockSync : Module {
     ClockTiming externalClock;
     OutputClock outputClock;
 
-    InternalClock internalClock;
-
     // TODO: Dynamic initialization seems uncommon--is this a poor practice for VCV plugins?
     std::unique_ptr<CVButtonToggle> runToggle;
     std::unique_ptr<CVButtonToggle> syncToggle;
@@ -215,12 +204,6 @@ struct ClockSync : Module {
       DEBUG("Sample Rate Changed");
     }
 
-    static void updateInternalClock(const ProcessArgs &args, InternalClock *clock) {
-      clock->currentTime += args.sampleTime;
-      clock->numSamples++;
-      clock->estimatedTime = (float) clock->numSamples / args.sampleRate;
-    }
-
     // Returns the value of the threshold knob. If the threshold CV input is connected, the supplied voltage
     // is multiplied by the scaling factor and added to the threshold value.
     float getThresholdValue() {
@@ -238,10 +221,6 @@ struct ClockSync : Module {
     void process(const ProcessArgs &args) override {
       runToggle->process();
       syncToggle->process();
-
-      curSampleTime += args.sampleTime;
-      sampleIndex++;
-      updateInternalClock(args, &internalClock);
 
 
       if (updateClockTiming(&mainClockTrigger, &inputs[MAINCLKIN_INPUT], &mainClock)) {
@@ -261,11 +240,6 @@ struct ClockSync : Module {
             mainClock.timePerPeriod, outputClock.timePerPulse,
             mainClock.beatsPerSecond, mainClock.beatsPerMinute
         );
-
-        DEBUG(
-            "Int Clock: Samples=%d, Est Time=%f, Cum Time=%f",
-            internalClock.numSamples, internalClock.estimatedTime, internalClock.currentTime
-        );
 #endif
       }
 
@@ -274,7 +248,7 @@ struct ClockSync : Module {
         float delay = mainClock.timePerPeriod - offset;
         float thresh = getThresholdValue();
         float error = abs(mainClock.halfPeriod - abs(offset - mainClock.halfPeriod)) / mainClock.halfPeriod;
-        currentlySynchronized = error <= thresh;
+        bool currentlySynchronized = error <= thresh;
 
         if (!currentlySynchronized && syncToggle->active) {
           if (offset > mainClock.halfPeriod) {

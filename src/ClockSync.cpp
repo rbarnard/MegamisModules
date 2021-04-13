@@ -18,6 +18,10 @@ static const float THRESHOLD_CV_SCALING_FACTOR = 0.1f;
 // to 180° out of phase.
 static const float SYNC_QUALITY_CV_SCALING_FACTOR = 10.0f;
 
+// TODO: Make configurable -- context menu?
+static const float OUTPUT_PULSE_DURATION = 5e-3f;
+
+
 // TODO: Is there a documented, requested code style for VCV modules?
 struct ClockSync : Module {
     enum ParamIds {
@@ -48,13 +52,6 @@ struct ClockSync : Module {
         SYNC_STATUS_LIGHT,
         NUM_LIGHTS
     };
-
-    // TODO: Make configurable -- context menu?
-    const float OUTPUT_PULSE_DURATION = 5e-3f;
-
-    unsigned short num_ppqn = 24;
-
-    dsp::SchmittTrigger mainClockTrigger, extClockTrigger;
 
 
     // Using args.sampleTime accumulates fp error, so we use
@@ -99,7 +96,11 @@ struct ClockSync : Module {
         float timePerPulse = 0.0f;
     };
 
-    // Represents active that can be toggled by either a button or external CV (e.g. run, sync)
+    // Represents a control that can be toggled by either a button or external CV (e.g. run, sync). The
+    // state of the control is:
+    //    - If there's no CV input connected, the the state of the button
+    //    - If there is a CV input connected, the AND of the button and the CV input
+    // The status LED indicates the combined state of the control.
     struct CVButtonToggle {
         dsp::BooleanTrigger trigger;
 
@@ -155,6 +156,7 @@ struct ClockSync : Module {
         }
     };
 
+
     ClockTiming mainClock;
     ClockTiming externalClock;
     OutputClock outputClock;
@@ -162,6 +164,9 @@ struct ClockSync : Module {
     // TODO: Dynamic initialization seems uncommon--is this a poor practice for VCV plugins?
     std::unique_ptr<CVButtonToggle> runToggle;
     std::unique_ptr<CVButtonToggle> syncToggle;
+
+    unsigned short num_ppqn = 24;
+    dsp::SchmittTrigger mainClockTrigger, extClockTrigger;
 
 
     ClockSync() {
@@ -319,7 +324,7 @@ struct ClockSync : Module {
       return syncToggle->active;
     }
 
-    bool processOutputClock(OutputClock *outputClock, float dT) const {
+    static bool processOutputClock(OutputClock *outputClock, float dT) {
       if (!outputClock->active) {
         return false;
       }
@@ -405,7 +410,7 @@ struct ClockSync : Module {
       }
 
       if (syncOutAlwaysJ) {
-        params[SYNCOUT_ALWAYS_ENABLED_PARAM].setValue(json_integer_value(syncOutAlwaysJ));
+        params[SYNCOUT_ALWAYS_ENABLED_PARAM].setValue((float) json_integer_value(syncOutAlwaysJ));
       }
 
       if (ppqnJ) {

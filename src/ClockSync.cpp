@@ -168,20 +168,17 @@ struct ClockSync : Module {
     std::unique_ptr<CVButtonToggle> runToggle;
     std::unique_ptr<CVButtonToggle> syncToggle;
 
-    unsigned short num_ppqn = DEFAULT_PPQN;
     dsp::SchmittTrigger mainClockTrigger, extClockTrigger;
 
 
     ClockSync() {
-      // TODO: Add labels and set ranges/defaults
       config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
-      configParam(RUNTOGGLE_PARAM, 0.f, 1.f, 0.f, "");
-      configParam(SYNCTOGGLE_PARAM, 0.f, 1.f, 0.f, "");
-      configParam(THRESHKNOB_PARAM, 1.0e-4f, 0.5f, 2.0e-4f, "");
+      configParam(RUNTOGGLE_PARAM, 0.f, 1.f, 0.f, "Run");
+      configParam(SYNCTOGGLE_PARAM, 0.f, 1.f, 0.f, "Enable Synchronization");
+      configParam(THRESHKNOB_PARAM, 1.0e-4f, 0.5f, 2.0e-4f, "Sync Threshold");
       configParam(SYNCOUT_ALWAYS_ENABLED_PARAM, 0.0f, 1.0f, 1.0f, "Always Set Sync Out");
 
-      // TODO: Make configurable
-      outputClock.pulsesPerQN = num_ppqn;
+      outputClock.pulsesPerQN = DEFAULT_PPQN;
 
       // Initialize the run and sync toggles (using reset since we can't initialize until after the params and
       // inputs have been created, which means we can't use member initialization).
@@ -227,7 +224,7 @@ struct ClockSync : Module {
 
 
       if (updateClockTiming(&mainClockTrigger, &inputs[MAINCLKIN_INPUT], &mainClock)) {
-        outputClock.timePerPulse = mainClock.timePerPeriod / (float) num_ppqn;
+        outputClock.timePerPulse = mainClock.timePerPeriod / (float) outputClock.pulsesPerQN;
 
         // We don't want to start sending output clock pulses until we've gotten timing from
         // the main clock; setting outputClock.active here signals that we're ready to send
@@ -261,7 +258,7 @@ struct ClockSync : Module {
             // We're late: speed up the clock so that we finish a complete cycle just in time for the
             // next main clock beat. Once that beat arrives, the external clock period will be readjusted
             // to match the main clock.
-            outputClock.timePerPulse = delay / (float) (num_ppqn);
+            outputClock.timePerPulse = delay / (float) (outputClock.pulsesPerQN);
           }
         }
 
@@ -272,7 +269,7 @@ struct ClockSync : Module {
             externalClock.beatsPerSecond, externalClock.beatsPerMinute,
             error, thresh, offset, delay,
             outputClock.curNoteTime, outputClock.timePerPulse,
-            (num_ppqn - outputClock.pulsesThisNote),
+            (outputClock.pulsesPerQN - outputClock.pulsesThisNote),
             currentlySynchronized
         );
 #endif
@@ -384,7 +381,7 @@ struct ClockSync : Module {
                           json_integer((int) params[SYNCOUT_ALWAYS_ENABLED_PARAM].getValue()));
 
       // Context menu settings
-      json_object_set_new(rootJ, PERSIST_KEY_PPQN, json_integer(this->num_ppqn));
+      json_object_set_new(rootJ, PERSIST_KEY_PPQN, json_integer(this->outputClock.pulsesPerQN));
 
 
       return rootJ;
@@ -410,7 +407,7 @@ struct ClockSync : Module {
       }
 
       if (ppqnJ) {
-        this->num_ppqn = json_integer_value(ppqnJ);
+        this->outputClock.pulsesPerQN = (int) json_integer_value(ppqnJ);
       }
     }
 };
@@ -424,7 +421,7 @@ struct ClockSyncExtPPQNValueItem : MenuItem {
         : module(module), ppqn(ppqn) {}
 
     void onAction(const event::Action &e) override {
-      module->num_ppqn = ppqn;
+      module->outputClock.pulsesPerQN = ppqn;
     }
 };
 
@@ -444,7 +441,7 @@ struct ClockSyncExtPPQNItem : MenuItem {
       for (const auto &value : ppqnValues) {
         auto *ppqnItem = new ClockSyncExtPPQNValueItem(module, value);
         ppqnItem->text = std::to_string(value);
-        ppqnItem->rightText = CHECKMARK(module->num_ppqn == value);
+        ppqnItem->rightText = CHECKMARK(module->outputClock.pulsesPerQN == value);
 
         menu->addChild(ppqnItem);
       }

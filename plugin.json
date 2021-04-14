@@ -1,26 +1,23 @@
 {
-  "slug": "ClockSync",
-  "name": "ClockSync",
+  "slug": "MegamisModules",
+  "name": "Megamis Modules",
   "version": "1.0.0",
   "license": "GPL-3.0-or-later",
-  "brand": "ClockSync",
-  "author": "",
-  "authorEmail": "",
-  "authorUrl": "",
-  "pluginUrl": "",
-  "manualUrl": "",
-  "sourceUrl": "",
-  "donateUrl": "",
-  "changelogUrl": "",
+  "brand": "Megamis Modules",
+  "author": "Ryan Barnard",
+  "authorEmail": "rbarnard@gmail.com",
+  "authorUrl": "https://github.com/rbarnard",
+  "pluginUrl": "https://github.com/rbarnard/MegamisModules",
+  "manualUrl": "https://github.com/rbarnard/MegamisModules/blob/main/README.md",
+  "sourceUrl": "https://github.com/rbarnard/MegamisModules",
+  "changelogUrl": "https://github.com/rbarnard/MegamisModules/blob/main/CHANGELOG.md",
   "modules": [
     {
       "slug": "ClockSync",
       "name": "ClockSync",
       "description": "Facilitates synchronizing Rack clocks with external devices.",
       "tags": [
-        "Utility",
-        "Clock modulator",
-        "MIDI"
+        "Clock modulator"
       ]
     }
   ]

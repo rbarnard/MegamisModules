@@ -17,7 +17,7 @@ and stop signals, it can align an external clock so that external beat gates arr
 
 ![IM](images/basic_connection.png)
 
-The following instructions are specifically for synchronizing an Arturia Keystep, but the basic
+The following instructions are specifically for synchronizing an [Arturia](https://www.arturia.com/) [Keystep](https://www.arturia.com/products/keystep/overview), but the basic
 principle should work with other devices.
 
 1. Make sure the Keystep's Sync DIP switches are set appropriately for your setup (e.g. USB, MIDI, or Sync In)
@@ -47,17 +47,17 @@ principle should work with other devices.
 ### Verified Working
 
 ClockSync has been tested with the following main clock sources:
-* Impromptu Clocked
-* ZZC Clock
-* Fundamental LFO-1
-* Bidoo tOCAnTe
-* Stellare Modular Link v2 (Ableton Link)
+* [Impromptu](https://library.vcvrack.com/?brand=Impromptu) [Clocked](https://library.vcvrack.com/ImpromptuModular/Clocked)
+* [ZZC](https://library.vcvrack.com/?query=&brand=ZZC) [Clock](https://library.vcvrack.com/ZZC/Clock)
+* [Fundamental](https://library.vcvrack.com/Fundamental) [LFO-1](https://library.vcvrack.com/Fundamental/LFO)
+* [Bidoo](https://library.vcvrack.com/?query=&brand=Bidoo) [tOCAnTe](https://library.vcvrack.com/Bidoo/tOCAnTe)
+* [Stellare](https://library.vcvrack.com/?query=&brand=Stellare+Modular) [Modular Link v2](https://library.vcvrack.com/StellareModular-Link/Link2) ([Ableton Link](https://www.ableton.com/en/link/))
 
 ClockSync has been tested with the following external devices (**NB**: the "external device" can
 also be another VCV module):
-* Arturia Keystep
-* Novation Circuit Tracks
-* Impromptu GateSeq64
+* [Arturia](https://www.arturia.com/) [Keystep](https://www.arturia.com/products/keystep/overview)
+* [Novation](https://novationmusic.com/) [Circuit Tracks](https://novationmusic.com/circuit/circuit-tracks)
+* [Impromptu](https://library.vcvrack.com/?brand=Impromptu) [GateSeq64](https://library.vcvrack.com/ImpromptuModular/Gate-Seq-64)
 
 
 ### Known Limitations

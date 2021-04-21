@@ -12,10 +12,4 @@ unzip -o rack-sdk.zip
 rm rack-sdk.zip
 
 make clean
-make cleantest
-make test
-./test.exe
-make cleantest
-
-make clean
 make dist
